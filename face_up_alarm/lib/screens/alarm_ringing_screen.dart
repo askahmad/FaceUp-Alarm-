@@ -1,11 +1,15 @@
 // lib/screens/alarm_ringing_screen.dart
 // FaceUp Alarm - Alarm Ringing Screen (SCREEN 3)
-// Step 4: Live front camera preview + circular face guide + verification stages
+// Step 5: Real-time on-device Google ML Kit Face Detection, Eye Check,
+// Interactive Challenge (Smile/Blink), and 3-Second Hold Verification
 
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import '../services/alarm_service.dart';
 import '../services/storage_service.dart';
+import '../services/face_detection_service.dart';
 import '../models/alarm_model.dart';
 import '../models/wake_history_model.dart';
 import '../utils/app_theme.dart';
@@ -29,6 +33,7 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
     with SingleTickerProviderStateMixin {
   final AlarmService _alarmService = AlarmService();
   final StorageService _storage = StorageService();
+  final FaceDetectionService _faceService = FaceDetectionService();
 
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
@@ -39,16 +44,22 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
 
   // Camera state
   CameraController? _cameraController;
+  CameraDescription? _cameraDescription;
   bool _isCameraInitialized = false;
+  bool _isStreaming = false;
   String? _cameraErrorMessage;
+
+  // Face Verification State
   FaceGuideStatus _guideStatus = FaceGuideStatus.searching;
   String _guideStatusUrdu = 'چہرہ دائرے میں لائیں';
   String _guideStatusEng = 'Align your face inside circle';
+  int _currentStage = 1;
+  double _holdProgress = 0.0;
+  String _activeChallenge = 'ایک بار پلک جھپکائیں / Blink Once';
 
-  // Verification stage
-  final int _currentStage = 1;
-  final double _holdProgress = 0.0;
-  final String _activeChallenge = 'ایک بار پلک جھپکائیں / Blink Once';
+  // Emergency safety override (after 60 seconds in case of hardware glitch)
+  bool _showEmergencyDismiss = false;
+  Timer? _emergencyTimer;
 
   @override
   void initState() {
@@ -64,9 +75,23 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Face Mode ON hone par front camera initialize karo
+    // Initialize Face Detection Service
+    _faceService.init();
+    _activeChallenge =
+        '${_faceService.activeChallengeUrdu} / ${_faceService.activeChallengeEng}';
+
+    // Face Mode ON hone par front camera shuru karo
     if (_alarm?.faceMode ?? true) {
       _initFrontCamera();
+
+      // Emergency dismiss timer (60 seconds)
+      _emergencyTimer = Timer(const Duration(seconds: 60), () {
+        if (mounted) {
+          setState(() {
+            _showEmergencyDismiss = true;
+          });
+        }
+      });
     }
   }
 
@@ -79,16 +104,18 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
             _cameraErrorMessage =
                 'کوئی کیمرہ نہیں ملا / No camera available on device';
             _guideStatus = FaceGuideStatus.error;
+            _showEmergencyDismiss = true;
           });
         }
         return;
       }
 
-      // Front camera dhundho (agar na mile toh pehla camera use karo)
+      // Front camera dhundho
       final frontCamera = cameras.firstWhere(
         (c) => c.lensDirection == CameraLensDirection.front,
         orElse: () => cameras.first,
       );
+      _cameraDescription = frontCamera;
 
       final controller = CameraController(
         frontCamera,
@@ -106,6 +133,9 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
           _cameraErrorMessage = null;
           _guideStatus = FaceGuideStatus.searching;
         });
+
+        // Start processing camera frames for ML Kit face detection
+        _startFaceDetectionStream(controller);
       }
     } catch (e) {
       if (mounted) {
@@ -115,15 +145,84 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
           _guideStatus = FaceGuideStatus.error;
           _guideStatusUrdu = 'کیمرہ شروع نہیں ہو سکا';
           _guideStatusEng = 'Camera failed to start';
+          _showEmergencyDismiss = true;
         });
       }
     }
   }
 
+  void _startFaceDetectionStream(CameraController controller) async {
+    if (_isStreaming || !controller.value.isInitialized) return;
+    _isStreaming = true;
+
+    try {
+      await controller.startImageStream((CameraImage cameraImage) async {
+        if (!_isStreaming || !mounted || _isSuccess) return;
+
+        // Process frame with ML Kit
+        final result = await _faceService.processCameraImage(
+          cameraImage: cameraImage,
+          cameraDescription: _cameraDescription!,
+          deviceOrientation: DeviceOrientation.portraitUp,
+        );
+
+        if (!mounted || _isSuccess) return;
+
+        setState(() {
+          _guideStatusUrdu = result.messageUrdu;
+          _guideStatusEng = result.messageEng;
+          _holdProgress = result.holdProgress;
+
+          switch (result.state) {
+            case VerificationState.searchingFace:
+              _currentStage = 1;
+              _guideStatus = FaceGuideStatus.searching;
+              break;
+            case VerificationState.eyesClosed:
+              _currentStage = 2;
+              _guideStatus = FaceGuideStatus.error;
+              break;
+            case VerificationState.challenging:
+              _currentStage = 2;
+              _guideStatus = FaceGuideStatus.detected;
+              break;
+            case VerificationState.holding:
+              _currentStage = 3;
+              _guideStatus = FaceGuideStatus.detected;
+              break;
+            case VerificationState.verified:
+              _currentStage = 3;
+              _guideStatus = FaceGuideStatus.success;
+              break;
+          }
+        });
+
+        // Agar 3 seconds continuous verification pass ho gayi!
+        if (result.isVerified) {
+          _isStreaming = false;
+          try {
+            await controller.stopImageStream();
+          } catch (_) {}
+          _dismissAlarm();
+        }
+      });
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     _pulseController.dispose();
+    _emergencyTimer?.cancel();
+    _isStreaming = false;
+
+    try {
+      if (_cameraController?.value.isStreamingImages == true) {
+        _cameraController?.stopImageStream();
+      }
+    } catch (_) {}
+
     _cameraController?.dispose();
+    _faceService.dispose();
     super.dispose();
   }
 
@@ -131,11 +230,20 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
     // 1. Stop native ringing and vibration
     await _alarmService.stopAlarm();
 
-    // 2. Dispose camera immediately
+    // 2. Stop camera stream and dispose
+    _isStreaming = false;
+    try {
+      if (_cameraController?.value.isStreamingImages == true) {
+        await _cameraController?.stopImageStream();
+      }
+    } catch (_) {}
     await _cameraController?.dispose();
     _cameraController = null;
 
-    // 3. Record wake history
+    // 3. Dispose face detector
+    _faceService.dispose();
+
+    // 4. Record wake history
     final now = DateTime.now();
     final history = WakeHistoryModel(
       alarmId: widget.alarmId,
@@ -152,7 +260,7 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
     );
     await _storage.saveWakeHistory(history);
 
-    // 4. Show success state
+    // 5. Show success state
     if (mounted) {
       setState(() {
         _isSuccess = true;
@@ -160,8 +268,8 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
             DateTimeUtils.formatTime12Hour(now.hour, now.minute);
       });
 
-      // 2 seconds success screen then return to Home
-      Future.delayed(const Duration(seconds: 2), () {
+      // 2.5 seconds success screen then return to Home
+      Future.delayed(const Duration(milliseconds: 2500), () {
         if (mounted) {
           Navigator.pop(context, true);
         }
@@ -358,35 +466,39 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
 
           const SizedBox(height: AppTheme.spacingL),
 
-          // Step 4 Test / Fallback Control: Stop Alarm Button
-          // (Step 5 will automatically verify via ML Kit and stop on 3-second hold)
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _dismissAlarm,
-              icon: const Icon(Icons.stop_circle_rounded, size: 28),
-              label: const Text(
-                'الارم بند کریں / Stop Alarm',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+          // Action Button:
+          // In Face Mode: Alarm only stops via face verification (or emergency button after 60s)
+          // In Standard Mode: Normal Stop Alarm button
+          if (!isFaceMode || _showEmergencyDismiss) ...[
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _dismissAlarm,
+                icon: const Icon(Icons.stop_circle_rounded, size: 28),
+                label: Text(
+                  _showEmergencyDismiss && isFaceMode
+                      ? 'ایمرجنسی الارم بند کریں / Emergency Stop'
+                      : 'الارم بند کریں / Stop Alarm',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.errorRed,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXL),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.errorRed,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusXL),
+                  ),
                 ),
               ),
             ),
-          ),
-
-          const SizedBox(height: AppTheme.spacingM),
+            const SizedBox(height: AppTheme.spacingM),
+          ],
 
           // Privacy Assurance Note
           const Text(
-            'آپ کی تصویر کہیں محفوظ نہیں ہوتی\nLive camera preview is processed locally only.',
+            'آپ کی تصویر کہیں محفوظ نہیں ہوتی\nLive face detection is 100% on-device and private.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 11,

@@ -1,12 +1,14 @@
 // test/widget_test.dart
-// FaceUp Alarm - Comprehensive Tests for Step 1, 2, 3, and 4
+// FaceUp Alarm - Comprehensive Tests for Step 1, 2, 3, 4, and 5
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:face_up_alarm/main.dart';
 import 'package:face_up_alarm/models/alarm_model.dart';
 import 'package:face_up_alarm/services/storage_service.dart';
+import 'package:face_up_alarm/services/face_detection_service.dart';
 import 'package:face_up_alarm/utils/date_time_utils.dart';
 import 'package:face_up_alarm/screens/set_alarm_screen.dart';
 import 'package:face_up_alarm/screens/alarm_ringing_screen.dart';
@@ -14,10 +16,21 @@ import 'package:face_up_alarm/widgets/face_guide.dart';
 import 'package:face_up_alarm/widgets/verification_progress.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   setUp(() async {
     // Mock SharedPreferences
     SharedPreferences.setMockInitialValues({});
     await StorageService().init();
+
+    // Mock ML Kit method channels
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('google_mlkit_face_detector'),
+      (MethodCall methodCall) async {
+        return null;
+      },
+    );
   });
 
   group('AlarmModel Tests', () {
@@ -93,7 +106,44 @@ void main() {
     });
   });
 
-  group('Step 4 Widgets Tests', () {
+  group('Step 5 FaceDetectionService Unit Tests', () {
+    test('FaceDetectionService initializes with blink and smile challenge',
+        () async {
+      final service = FaceDetectionService();
+
+      service.init(challenge: FaceChallengeType.blink);
+      expect(service.activeChallenge, FaceChallengeType.blink);
+      expect(service.activeChallengeUrdu, 'ایک بار پلک جھپکائیں');
+      expect(service.activeChallengeEng, 'Blink Once');
+
+      service.init(challenge: FaceChallengeType.smile);
+      expect(service.activeChallenge, FaceChallengeType.smile);
+      expect(service.activeChallengeUrdu, 'مسکرائیں');
+      expect(service.activeChallengeEng, 'Smile');
+
+      await service.dispose();
+    });
+
+    test('VerificationResult default state and properties', () {
+      const result = VerificationResult(
+        state: VerificationState.holding,
+        messageUrdu: 'تین سیکنڈ رکیں',
+        messageEng: 'Hold for 3 seconds',
+        holdProgress: 0.66,
+        isVerified: false,
+        leftEyeOpen: 0.95,
+        rightEyeOpen: 0.92,
+      );
+
+      expect(result.state, VerificationState.holding);
+      expect(result.holdProgress, 0.66);
+      expect(result.isVerified, false);
+      expect(result.leftEyeOpen, 0.95);
+      expect(result.rightEyeOpen, 0.92);
+    });
+  });
+
+  group('Step 4 & 5 Widgets Tests', () {
     testWidgets('FaceGuide renders circle cutout and status labels',
         (WidgetTester tester) async {
       await tester.pumpWidget(
@@ -180,7 +230,7 @@ void main() {
     });
 
     testWidgets(
-        'AlarmRingingScreen displays face guide, stages and stop button',
+        'AlarmRingingScreen displays face guide, stages and privacy label',
         (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -198,8 +248,9 @@ void main() {
       expect(find.text('آنکھیں کھلی رکھیں'), findsOneWidget);
       expect(find.text('تین سیکنڈ رکیں'), findsOneWidget);
 
-      // Stop button
-      expect(find.text('الارم بند کریں / Stop Alarm'), findsOneWidget);
+      // Privacy assurance
+      expect(find.textContaining('آپ کی تصویر کہیں محفوظ نہیں ہوتی'),
+          findsOneWidget);
     });
   });
 }

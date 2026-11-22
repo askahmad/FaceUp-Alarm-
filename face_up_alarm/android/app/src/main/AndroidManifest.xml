@@ -31,6 +31,7 @@
 
     <!-- Foreground Service - Alarm service ke liye -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- ============================================================
@@ -78,7 +79,6 @@
         <!-- ============================================================
              ALARM BROADCAST RECEIVER
              Android OS ye receiver ko alarm time par call karta hai
-             STEP 3 mein implement hoga
              ============================================================ -->
         <receiver
             android:name=".AlarmBroadcastReceiver"
@@ -87,6 +87,16 @@
                 <action android:name="FACEUP_ALARM_TRIGGER" />
             </intent-filter>
         </receiver>
+
+        <!-- ============================================================
+             ALARM FOREGROUND SERVICE
+             Alarm ringtone, vibration aur full-screen notification chalati hai
+             ============================================================ -->
+        <service
+            android:name=".AlarmForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <!-- ============================================================
              BOOT RECEIVER

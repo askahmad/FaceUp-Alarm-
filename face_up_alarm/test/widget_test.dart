@@ -1,5 +1,5 @@
 // test/widget_test.dart
-// FaceUp Alarm - Comprehensive Tests for Step 2
+// FaceUp Alarm - Comprehensive Tests for Step 1, 2, and 3
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +9,7 @@ import 'package:face_up_alarm/models/alarm_model.dart';
 import 'package:face_up_alarm/services/storage_service.dart';
 import 'package:face_up_alarm/utils/date_time_utils.dart';
 import 'package:face_up_alarm/screens/set_alarm_screen.dart';
+import 'package:face_up_alarm/screens/alarm_ringing_screen.dart';
 
 void main() {
   setUp(() async {
@@ -37,6 +38,7 @@ void main() {
       expect(fromJson.faceMode, true);
       expect(fromJson.isEnabled, true);
       expect(fromJson.ringtoneName, 'Test Ringtone');
+      expect(fromJson.androidAlarmId > 0, true);
     });
 
     test('AlarmModel copyWith updates fields properly', () {
@@ -129,6 +131,28 @@ void main() {
 
       // Save button
       expect(find.text('الارم محفوظ کریں / Save Alarm'), findsOneWidget);
+    });
+
+    testWidgets('AlarmRingingScreen displays 3 stages and stop alarm button',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: AlarmRingingScreen(alarmId: 'test_alarm_1'),
+        ),
+      );
+      await tester.pump();
+
+      // Headings
+      expect(find.text('اٹھ جائیں! اپنا چہرہ دکھائیں'), findsOneWidget);
+      expect(find.text('Wake up! Show your face.'), findsOneWidget);
+
+      // Stages
+      expect(find.text('چہرہ تلاش کر رہے ہیں'), findsOneWidget);
+      expect(find.text('آنکھیں کھلی رکھیں'), findsOneWidget);
+      expect(find.text('تین سیکنڈ رکیں'), findsOneWidget);
+
+      // Stop button
+      expect(find.text('الارم بند کریں / Stop Alarm'), findsOneWidget);
     });
   });
 }

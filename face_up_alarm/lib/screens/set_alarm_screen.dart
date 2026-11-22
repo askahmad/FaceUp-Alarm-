@@ -4,8 +4,8 @@
 
 import 'package:flutter/material.dart';
 import '../models/alarm_model.dart';
-import '../services/storage_service.dart';
 import '../services/audio_service.dart';
+import '../services/alarm_service.dart';
 import '../utils/app_theme.dart';
 import '../utils/app_constants.dart';
 import '../utils/date_time_utils.dart';
@@ -20,7 +20,6 @@ class SetAlarmScreen extends StatefulWidget {
 }
 
 class _SetAlarmScreenState extends State<SetAlarmScreen> {
-  final StorageService _storage = StorageService();
   final AudioService _audio = AudioService();
 
   late int _selectedHour;
@@ -143,6 +142,34 @@ class _SetAlarmScreenState extends State<SetAlarmScreen> {
       await _audio.stopRingtonePreview();
     }
 
+    // Check exact alarm permission on Android 12+
+    final canExact = await AlarmService().canScheduleExactAlarms();
+    if (!canExact && mounted) {
+      final request = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('پرمیشن درکار ہے / Permission Required'),
+          content: const Text(
+            'اینڈرائڈ 12+ پر وقت پر الارم بجانے کے لیے Exact Alarm پرمیشن درکار ہے۔\nAndroid requires Exact Alarm permission to fire on time.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('چھوڑ دیں / Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('سیٹنگز کھولیں / Open Settings'),
+            ),
+          ],
+        ),
+      );
+
+      if (request == true) {
+        await AlarmService().requestExactAlarmPermission();
+      }
+    }
+
     final AlarmModel alarmToSave;
     if (widget.existingAlarm != null) {
       alarmToSave = widget.existingAlarm!.copyWith(
@@ -165,7 +192,8 @@ class _SetAlarmScreenState extends State<SetAlarmScreen> {
       );
     }
 
-    final success = await _storage.saveAlarm(alarmToSave);
+    // Android AlarmManager se schedule karo
+    final success = await AlarmService().scheduleAlarm(alarmToSave);
 
     if (mounted) {
       if (success) {
@@ -235,7 +263,7 @@ class _SetAlarmScreenState extends State<SetAlarmScreen> {
                 );
 
                 if (confirm == true && mounted) {
-                  await _storage.deleteAlarm(widget.existingAlarm!.id);
+                  await AlarmService().cancelAlarm(widget.existingAlarm!.id);
                   nav.pop(true);
                 }
               },

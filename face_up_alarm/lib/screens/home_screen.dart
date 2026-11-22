@@ -6,11 +6,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/alarm_model.dart';
 import '../services/storage_service.dart';
+import '../services/alarm_service.dart';
 import '../utils/app_theme.dart';
 import '../utils/app_constants.dart';
 import '../utils/date_time_utils.dart';
 import '../widgets/alarm_card.dart';
 import 'set_alarm_screen.dart';
+import 'alarm_ringing_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,9 +23,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final StorageService _storage = StorageService();
+  final AlarmService _alarmService = AlarmService();
 
   List<AlarmModel> _alarms = [];
   Timer? _clockTimer;
+  StreamSubscription<String>? _alarmSubscription;
   DateTime _currentTime = DateTime.now();
 
   @override
@@ -39,11 +43,39 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     });
+
+    // Listen to native alarm triggers
+    _alarmSubscription = _alarmService.onAlarmTriggered.listen((alarmId) {
+      if (mounted) {
+        _openAlarmRingingScreen(alarmId);
+      }
+    });
+
+    // Check if an alarm is already ringing on cold launch
+    _checkActiveAlarm();
+  }
+
+  Future<void> _checkActiveAlarm() async {
+    final activeId = await _alarmService.getActiveRingingAlarmId();
+    if (activeId != null && mounted) {
+      _openAlarmRingingScreen(activeId);
+    }
+  }
+
+  void _openAlarmRingingScreen(String alarmId) async {
+    await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AlarmRingingScreen(alarmId: alarmId),
+      ),
+    );
+    _loadAlarms();
   }
 
   @override
   void dispose() {
     _clockTimer?.cancel();
+    _alarmSubscription?.cancel();
     super.dispose();
   }
 
@@ -59,7 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onToggleAlarm(AlarmModel alarm, bool isEnabled) async {
-    await _storage.toggleAlarm(alarm.id, isEnabled);
+    await _alarmService.toggleAlarm(alarm.id, isEnabled);
     _loadAlarms();
   }
 
@@ -87,7 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (confirm == true) {
-      await _storage.deleteAlarm(alarm.id);
+      await _alarmService.cancelAlarm(alarm.id);
       _loadAlarms();
     }
   }

@@ -1,0 +1,41 @@
+name: face_up_alarm
+description: "FaceUp Alarm - چہرہ الارم - Wake up with face verification"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.13.0 <4.0.0'
+  flutter: '>=3.47.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Camera - front camera ke liye
+  camera: ^0.12.2
+
+  # ML Kit - face detection ke liye (Google ka free, offline solution)
+  google_mlkit_face_detection: ^1.0.3
+
+  # Alarm Manager - Android OS mein alarm schedule karne ke liye
+  android_alarm_manager_plus: ^5.1.2
+
+  # Local Notifications - full-screen alarm notification ke liye
+  flutter_local_notifications: ^23.0.3
+
+  # SharedPreferences - alarm data local store karne ke liye
+  shared_preferences: ^2.5.5
+
+  # Icons
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  # App fonts - Urdu support ke liye system fonts use karenge
+  # (No custom font needed - Android supports Urdu natively)

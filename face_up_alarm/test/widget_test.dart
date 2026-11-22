@@ -1,5 +1,5 @@
 // test/widget_test.dart
-// FaceUp Alarm - Comprehensive Tests for Step 1, 2, and 3
+// FaceUp Alarm - Comprehensive Tests for Step 1, 2, 3, and 4
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +10,8 @@ import 'package:face_up_alarm/services/storage_service.dart';
 import 'package:face_up_alarm/utils/date_time_utils.dart';
 import 'package:face_up_alarm/screens/set_alarm_screen.dart';
 import 'package:face_up_alarm/screens/alarm_ringing_screen.dart';
+import 'package:face_up_alarm/widgets/face_guide.dart';
+import 'package:face_up_alarm/widgets/verification_progress.dart';
 
 void main() {
   setUp(() async {
@@ -91,7 +93,51 @@ void main() {
     });
   });
 
-  group('Widget UI Tests', () {
+  group('Step 4 Widgets Tests', () {
+    testWidgets('FaceGuide renders circle cutout and status labels',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: FaceGuide(
+              status: FaceGuideStatus.searching,
+              statusUrdu: 'چہرہ دائرے میں لائیں',
+              statusEng: 'Align face in circle',
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('چہرہ دائرے میں لائیں'), findsOneWidget);
+      expect(find.text('Align face in circle'), findsOneWidget);
+    });
+
+    testWidgets('VerificationProgress renders 3 stages and challenge badge',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: VerificationProgress(
+              currentStage: 2,
+              holdProgress: 0.5,
+              activeChallengeLabel: 'ایک بار پلک جھپکائیں / Blink Once',
+            ),
+          ),
+        ),
+      );
+
+      // 3 stages
+      expect(find.text('چہرہ تلاش کر رہے ہیں'), findsOneWidget);
+      expect(find.text('آنکھیں کھلی رکھیں'), findsOneWidget);
+      expect(find.text('تین سیکنڈ رکیں'), findsOneWidget);
+
+      // Challenge badge
+      expect(
+          find.text('ایک بار پلک جھپکائیں / Blink Once'), findsOneWidget);
+    });
+  });
+
+  group('Widget UI Screens Tests', () {
     testWidgets('Home Screen displays empty state when no alarms are saved',
         (WidgetTester tester) async {
       await tester.pumpWidget(const FaceUpAlarmApp());
@@ -133,7 +179,8 @@ void main() {
       expect(find.text('الارم محفوظ کریں / Save Alarm'), findsOneWidget);
     });
 
-    testWidgets('AlarmRingingScreen displays 3 stages and stop alarm button',
+    testWidgets(
+        'AlarmRingingScreen displays face guide, stages and stop button',
         (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -146,7 +193,7 @@ void main() {
       expect(find.text('اٹھ جائیں! اپنا چہرہ دکھائیں'), findsOneWidget);
       expect(find.text('Wake up! Show your face.'), findsOneWidget);
 
-      // Stages
+      // Verification stages
       expect(find.text('چہرہ تلاش کر رہے ہیں'), findsOneWidget);
       expect(find.text('آنکھیں کھلی رکھیں'), findsOneWidget);
       expect(find.text('تین سیکنڈ رکیں'), findsOneWidget);

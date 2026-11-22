@@ -1,14 +1,17 @@
 // lib/screens/alarm_ringing_screen.dart
 // FaceUp Alarm - Alarm Ringing Screen (SCREEN 3)
-// Step 3: Alarm sound + vibration + full-screen launch + stop control
+// Step 4: Live front camera preview + circular face guide + verification stages
 
 import 'package:flutter/material.dart';
+import 'package:camera/camera.dart';
 import '../services/alarm_service.dart';
 import '../services/storage_service.dart';
 import '../models/alarm_model.dart';
 import '../models/wake_history_model.dart';
 import '../utils/app_theme.dart';
 import '../utils/date_time_utils.dart';
+import '../widgets/face_guide.dart';
+import '../widgets/verification_progress.dart';
 
 class AlarmRingingScreen extends StatefulWidget {
   final String alarmId;
@@ -34,6 +37,19 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
   bool _isSuccess = false;
   String _successTime = '';
 
+  // Camera state
+  CameraController? _cameraController;
+  bool _isCameraInitialized = false;
+  String? _cameraErrorMessage;
+  FaceGuideStatus _guideStatus = FaceGuideStatus.searching;
+  String _guideStatusUrdu = 'چہرہ دائرے میں لائیں';
+  String _guideStatusEng = 'Align your face inside circle';
+
+  // Verification stage
+  final int _currentStage = 1;
+  final double _holdProgress = 0.0;
+  final String _activeChallenge = 'ایک بار پلک جھپکائیں / Blink Once';
+
   @override
   void initState() {
     super.initState();
@@ -44,14 +60,70 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
 
-    _pulseAnimation = Tween<double>(begin: 0.95, end: 1.08).animate(
+    _pulseAnimation = Tween<double>(begin: 0.96, end: 1.04).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+
+    // Face Mode ON hone par front camera initialize karo
+    if (_alarm?.faceMode ?? true) {
+      _initFrontCamera();
+    }
+  }
+
+  Future<void> _initFrontCamera() async {
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _cameraErrorMessage =
+                'کوئی کیمرہ نہیں ملا / No camera available on device';
+            _guideStatus = FaceGuideStatus.error;
+          });
+        }
+        return;
+      }
+
+      // Front camera dhundho (agar na mile toh pehla camera use karo)
+      final frontCamera = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+
+      final controller = CameraController(
+        frontCamera,
+        ResolutionPreset.medium,
+        enableAudio: false, // Privacy: Audio record nahi karni
+        imageFormatGroup: ImageFormatGroup.yuv420,
+      );
+
+      _cameraController = controller;
+      await controller.initialize();
+
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = true;
+          _cameraErrorMessage = null;
+          _guideStatus = FaceGuideStatus.searching;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _cameraErrorMessage =
+              'کیمرہ پرمیشن درکار ہے / Camera permission required';
+          _guideStatus = FaceGuideStatus.error;
+          _guideStatusUrdu = 'کیمرہ شروع نہیں ہو سکا';
+          _guideStatusEng = 'Camera failed to start';
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
+    _cameraController?.dispose();
     super.dispose();
   }
 
@@ -59,7 +131,11 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
     // 1. Stop native ringing and vibration
     await _alarmService.stopAlarm();
 
-    // 2. Record wake history
+    // 2. Dispose camera immediately
+    await _cameraController?.dispose();
+    _cameraController = null;
+
+    // 3. Record wake history
     final now = DateTime.now();
     final history = WakeHistoryModel(
       alarmId: widget.alarmId,
@@ -76,7 +152,7 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
     );
     await _storage.saveWakeHistory(history);
 
-    // 3. Show success state
+    // 4. Show success state
     if (mounted) {
       setState(() {
         _isSuccess = true;
@@ -84,7 +160,7 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
             DateTimeUtils.formatTime12Hour(now.hour, now.minute);
       });
 
-      // 2 seconds success animation then return to Home
+      // 2 seconds success screen then return to Home
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
           Navigator.pop(context, true);
@@ -109,7 +185,7 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppTheme.spacingL,
-              vertical: AppTheme.spacingXL,
+              vertical: AppTheme.spacingM,
             ),
             child: _isSuccess ? _buildSuccessView() : _buildRingingView(timeStr),
           ),
@@ -119,6 +195,8 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
   }
 
   Widget _buildRingingView(String timeStr) {
+    final bool isFaceMode = _alarm?.faceMode ?? true;
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       child: Column(
@@ -126,31 +204,31 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
           // Top section: Urdu & English Heading
           Column(
             children: [
-              const SizedBox(height: AppTheme.spacingM),
+              const SizedBox(height: AppTheme.spacingS),
               const Text(
                 'اٹھ جائیں! اپنا چہرہ دکھائیں',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 26,
+                  fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textPrimary,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               const Text(
                 'Wake up! Show your face.',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 15,
                   color: AppTheme.textSecondary,
                   letterSpacing: 0.5,
                 ),
               ),
-              const SizedBox(height: AppTheme.spacingM),
+              const SizedBox(height: AppTheme.spacingS),
               // Current ringing time
               Text(
                 timeStr,
                 style: AppTheme.clockStyle.copyWith(
-                  fontSize: 50,
+                  fontSize: 44,
                   fontWeight: FontWeight.bold,
                   color: AppTheme.primaryBlueDark,
                 ),
@@ -160,10 +238,95 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
 
           const SizedBox(height: AppTheme.spacingM),
 
-          // Center section: Pulsing Alarm Icon / Face Verification placeholder
-          ScaleTransition(
-            scale: _pulseAnimation,
-            child: Container(
+          // Center section: Front Camera Live Preview with FaceGuide
+          if (isFaceMode) ...[
+            ScaleTransition(
+              scale: _pulseAnimation,
+              child: FaceGuide(
+                circleDiameter: 250,
+                status: _guideStatus,
+                statusUrdu: _guideStatusUrdu,
+                statusEng: _guideStatusEng,
+                child: _isCameraInitialized && _cameraController != null
+                    ? AspectRatio(
+                        aspectRatio: 1,
+                        child: FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width:
+                                _cameraController!.value.previewSize?.height ??
+                                    1,
+                            height:
+                                _cameraController!.value.previewSize?.width ??
+                                    1,
+                            child: CameraPreview(_cameraController!),
+                          ),
+                        ),
+                      )
+                    : Container(
+                        color: Colors.black12,
+                        child: Center(
+                          child: _cameraErrorMessage != null
+                              ? Padding(
+                                  padding: const EdgeInsets.all(16.0),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.videocam_off_rounded,
+                                        size: 48,
+                                        color: AppTheme.errorRed,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        _cameraErrorMessage!,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppTheme.errorRed,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      ElevatedButton(
+                                        onPressed: _initFrontCamera,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              AppTheme.primaryBlue,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 8,
+                                          ),
+                                        ),
+                                        child: const Text('دوبارہ کوشش کریں / Retry'),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : const Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    CircularProgressIndicator(
+                                      color: AppTheme.primaryBlue,
+                                    ),
+                                    SizedBox(height: 12),
+                                    Text(
+                                      'کیمرہ شروع ہو رہا ہے...\nStarting front camera...',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+              ),
+            ),
+          ] else ...[
+            // Standard alarm placeholder if Face Mode is OFF
+            Container(
               width: 140,
               height: 140,
               decoration: BoxDecoration(
@@ -182,48 +345,21 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
                 ),
               ),
             ),
+          ],
+
+          const SizedBox(height: AppTheme.spacingM),
+
+          // 3-Stage Verification Progress UI
+          VerificationProgress(
+            currentStage: _currentStage,
+            holdProgress: _holdProgress,
+            activeChallengeLabel: _activeChallenge,
           ),
 
           const SizedBox(height: AppTheme.spacingL),
 
-          // 3 Verification Stages Display
-          Container(
-            padding: const EdgeInsets.all(AppTheme.spacingM),
-            decoration: BoxDecoration(
-              color: AppTheme.surface,
-              borderRadius: BorderRadius.circular(AppTheme.radiusL),
-              boxShadow: AppTheme.cardShadow,
-            ),
-            child: const Column(
-              children: [
-                _StageRow(
-                  icon: Icons.face_retouching_natural_rounded,
-                  stageNumber: '1',
-                  urduText: 'چہرہ تلاش کر رہے ہیں',
-                  engText: 'Face Detection',
-                ),
-                Divider(height: 16),
-                _StageRow(
-                  icon: Icons.visibility_rounded,
-                  stageNumber: '2',
-                  urduText: 'آنکھیں کھلی رکھیں',
-                  engText: 'Eyes Open',
-                ),
-                Divider(height: 16),
-                _StageRow(
-                  icon: Icons.timer_rounded,
-                  stageNumber: '3',
-                  urduText: 'تین سیکنڈ رکیں',
-                  engText: 'Hold for 3 Seconds',
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: AppTheme.spacingL),
-
-          // Step 3 Test Control: Stop Alarm Button
-          // (Step 4-5 will gate this behind camera & ML Kit detection)
+          // Step 4 Test / Fallback Control: Stop Alarm Button
+          // (Step 5 will automatically verify via ML Kit and stop on 3-second hold)
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -247,6 +383,18 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
           ),
 
           const SizedBox(height: AppTheme.spacingM),
+
+          // Privacy Assurance Note
+          const Text(
+            'آپ کی تصویر کہیں محفوظ نہیں ہوتی\nLive camera preview is processed locally only.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+
+          const SizedBox(height: AppTheme.spacingS),
         ],
       ),
     );
@@ -289,65 +437,6 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
           ),
         ],
       ),
-    );
-  }
-}
-
-class _StageRow extends StatelessWidget {
-  final IconData icon;
-  final String stageNumber;
-  final String urduText;
-  final String engText;
-
-  const _StageRow({
-    required this.icon,
-    required this.stageNumber,
-    required this.urduText,
-    required this.engText,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        CircleAvatar(
-          radius: 14,
-          backgroundColor: AppTheme.primaryBlueLight,
-          child: Text(
-            stageNumber,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.primaryBlueDark,
-            ),
-          ),
-        ),
-        const SizedBox(width: AppTheme.spacingM),
-        Icon(icon, color: AppTheme.primaryBlue, size: 22),
-        const SizedBox(width: AppTheme.spacingS),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                urduText,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              Text(
-                engText,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

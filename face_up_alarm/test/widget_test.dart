@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:face_up_alarm/main.dart';
 import 'package:face_up_alarm/models/alarm_model.dart';
+import 'package:face_up_alarm/models/wake_history_model.dart';
 import 'package:face_up_alarm/services/storage_service.dart';
 import 'package:face_up_alarm/services/face_detection_service.dart';
 import 'package:face_up_alarm/utils/date_time_utils.dart';
@@ -113,6 +114,42 @@ void main() {
       // Delete
       await storage.deleteAlarm(alarm.id);
       expect(storage.getAllAlarms().isEmpty, true);
+    });
+
+    test('StorageService persists and retrieves wake history', () async {
+      final storage = StorageService();
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      final history = WakeHistoryModel(
+        alarmId: 'alarm_test',
+        wakeTime: now,
+        scheduledTime: now,
+      );
+
+      final saved = await storage.saveWakeHistory(history);
+      expect(saved, true);
+
+      final list = storage.getAllWakeHistory();
+      expect(list.isNotEmpty, true);
+      expect(list.last.alarmId, 'alarm_test');
+    });
+  });
+
+  group('Step 7 WakeHistoryModel Tests', () {
+    test('WakeHistoryModel serialization and minutesLate calculation', () {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final history = WakeHistoryModel(
+        alarmId: 'alarm_123',
+        wakeTime: now + 5 * 60 * 1000, // 5 minutes later
+        scheduledTime: now,
+      );
+
+      final json = history.toJson();
+      final fromJson = WakeHistoryModel.fromJson(json);
+
+      expect(fromJson.alarmId, 'alarm_123');
+      expect(fromJson.minutesLate, 5);
+      expect(fromJson.wakeTime, history.wakeTime);
     });
   });
 

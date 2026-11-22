@@ -124,6 +124,234 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _showPrivacyDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.shield_rounded, color: AppTheme.accentGreen),
+            SizedBox(width: 8),
+            Text('پرائیویسی کی ضمانت'),
+          ],
+        ),
+        content: const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'آپ کا ڈیٹا 100% محفوظ ہے',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              SizedBox(height: 8),
+              Text(
+                '1. کیمرے کی کوئی تصویر یا ویڈیو محفوظ نہیں ہوتی۔\n'
+                '2. چہرے کی تصدیق فون کے اندر ہی Google ML Kit کے ذریعے آف لائن ہوتی ہے۔\n'
+                '3. کوئی سرور، کوئی اکاؤنٹ اور کوئی ٹریکنگ موجود نہیں ہے۔\n'
+                '4. صرف آپ کے الارم کے اوقات اور جاگنے کا وقت فون میں محفوظ رہتا ہے۔\n\n'
+                'Privacy Commitment:\n'
+                '• No camera frames or face images are ever stored or uploaded.\n'
+                '• 100% on-device local face detection.\n'
+                '• No analytics, no server, and zero tracking.',
+                style: TextStyle(fontSize: 13, height: 1.5),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('سمجھ گیا / Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showWakeHistorySheet(BuildContext context) {
+    final historyList = _storage.getAllWakeHistory().reversed.toList();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusXL)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (context, scrollController) => Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'جاگنے کا ریکارڈ / History',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'چہرے کی تصدیق کے ساتھ جاگنے کے اوقات',
+                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentGreenLight,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusS),
+                    ),
+                    child: Text(
+                      '${historyList.length} ریکارڈز',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.accentGreen,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(),
+            Expanded(
+              child: historyList.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.history_toggle_off_rounded,
+                              size: 48, color: AppTheme.textLight),
+                          SizedBox(height: 12),
+                          Text(
+                            'ابھی تک جاگنے کا کوئی ریکارڈ نہیں',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            'No wake-up history yet.',
+                            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      controller: scrollController,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      itemCount: historyList.length,
+                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final item = historyList[index];
+                        final dt = item.wakeDateTime;
+                        final timeStr =
+                            DateTimeUtils.formatTime12Hour(dt.hour, dt.minute);
+                        final dateStr = '${dt.day}/${dt.month}/${dt.year}';
+                        final isLate = item.minutesLate > 3;
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: isLate
+                                      ? AppTheme.warningOrange.withValues(alpha: 0.15)
+                                      : AppTheme.accentGreenLight,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.verified_user_rounded,
+                                  color: isLate
+                                      ? AppTheme.warningOrange
+                                      : AppTheme.accentGreen,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      timeStr,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.textPrimary,
+                                      ),
+                                    ),
+                                    Text(
+                                      dateStr,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isLate
+                                      ? AppTheme.warningOrange.withValues(alpha: 0.15)
+                                      : AppTheme.accentGreenLight,
+                                  borderRadius:
+                                      BorderRadius.circular(AppTheme.radiusS),
+                                ),
+                                child: Text(
+                                  isLate
+                                      ? '${item.minutesLate} منٹ تاخیر'
+                                      : 'بر وقت / On time',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: isLate
+                                        ? AppTheme.warningOrange
+                                        : AppTheme.accentGreen,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _navigateToAddAlarm() async {
     final result = await Navigator.push<bool>(
       context,
@@ -231,13 +459,25 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  Text(
-                    DateTimeUtils.getTodayLabel(),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.history_rounded,
+                          color: AppTheme.primaryBlue,
+                        ),
+                        onPressed: () => _showWakeHistorySheet(context),
+                        tooltip: 'جاگنے کا ریکارڈ / History',
+                      ),
+                      Text(
+                        DateTimeUtils.getTodayLabel(),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -355,39 +595,41 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: _alarms.isEmpty
                   ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: AppTheme.surfaceVariant,
-                              shape: BoxShape.circle,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(18),
+                              decoration: const BoxDecoration(
+                                color: AppTheme.surfaceVariant,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.alarm_off_rounded,
+                                size: 40,
+                                color: AppTheme.textLight,
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.alarm_off_rounded,
-                              size: 48,
-                              color: AppTheme.textLight,
+                            const SizedBox(height: AppTheme.spacingS),
+                            const Text(
+                              'ابھی کوئی الارم نہیں لگا',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.textPrimary,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: AppTheme.spacingM),
-                          const Text(
-                            'ابھی کوئی الارم نہیں لگا',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.textPrimary,
+                            const SizedBox(height: 2),
+                            const Text(
+                              'No alarm is set yet.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppTheme.textSecondary,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'No alarm is set yet.',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     )
                   : ListView.builder(
@@ -405,17 +647,37 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
 
             // ============================================================
-            // 5. PRIVACY MESSAGE
+            // 5. PRIVACY MESSAGE (Clickable with full guarantee dialog)
             // ============================================================
             Padding(
               padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.spacingXL,
+                horizontal: AppTheme.spacingL,
                 vertical: AppTheme.spacingXS,
               ),
-              child: Text(
-                AppConstants.privacyMessage,
-                textAlign: TextAlign.center,
-                style: AppTheme.privacyStyle,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                onTap: () => _showPrivacyDialog(context),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.shield_outlined,
+                        size: 14,
+                        color: AppTheme.accentGreen,
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          AppConstants.privacyMessage,
+                          textAlign: TextAlign.center,
+                          style: AppTheme.privacyStyle,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
 

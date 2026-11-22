@@ -82,6 +82,16 @@ void main() {
       expect(DateTimeUtils.getRepeatDaysLabel([1, 2, 3, 4, 5, 6, 7]),
           'ہر روز / Every day');
     });
+
+    test('getNextAlarmTime never schedules in the past', () {
+      final now = DateTime.now();
+      // Schedule an alarm for 1 hour ago
+      final pastHour = (now.hour - 1 + 24) % 24;
+      final nextTime = DateTimeUtils.getNextAlarmTime(pastHour, now.minute, []);
+
+      expect(nextTime != null, true);
+      expect(nextTime!.isAfter(now), true);
+    });
   });
 
   group('StorageService Tests', () {

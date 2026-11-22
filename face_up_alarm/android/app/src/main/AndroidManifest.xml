@@ -112,6 +112,9 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <!-- MIUI devices ke liye -->
                 <action android:name="com.miui.powercenter.poweron" />
+                <!-- Time & Timezone changes -->
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
 

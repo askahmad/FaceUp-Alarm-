@@ -285,7 +285,21 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
         : DateTimeUtils.formatTime12Hour(now.hour, now.minute);
 
     return PopScope(
-      canPop: false, // Step 6 requirement: Block back button while ringing!
+      canPop: false, // Step 6: Block back button while alarm is ringing!
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'الارم بند کرنے کے لیے چہرہ دکھائیں! / Show your face to stop alarm!',
+                textAlign: TextAlign.center,
+              ),
+              duration: Duration(seconds: 2),
+              backgroundColor: AppTheme.errorRed,
+            ),
+          );
+        }
+      },
       child: Scaffold(
         backgroundColor:
             _isSuccess ? AppTheme.accentGreen : AppTheme.background,

@@ -107,69 +107,20 @@ class MainActivity : FlutterActivity() {
                         val ringtoneUri = call.argument<String>("ringtoneUri") ?: ""
                         val faceMode = call.argument<Boolean>("faceMode") ?: true
 
-                        val intent = Intent(this@MainActivity, AlarmBroadcastReceiver::class.java).apply {
-                            action = "FACEUP_ALARM_TRIGGER"
-                            putExtra(AlarmForegroundService.EXTRA_ALARM_ID, alarmIdString)
-                            putExtra(AlarmForegroundService.EXTRA_RINGTONE_URI, ringtoneUri)
-                            putExtra(AlarmForegroundService.EXTRA_FACE_MODE, faceMode)
-                        }
-
-                        val pendingIntent = PendingIntent.getBroadcast(
+                        val success = AlarmScheduler.schedule(
                             this@MainActivity,
                             id,
-                            intent,
-                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                            triggerAtMillis,
+                            alarmIdString,
+                            ringtoneUri,
+                            faceMode
                         )
-
-                        // Intent to show clock / open app when user clicks clock widget
-                        val showIntent = Intent(this@MainActivity, MainActivity::class.java)
-                        val showPendingIntent = PendingIntent.getActivity(
-                            this@MainActivity,
-                            id,
-                            showIntent,
-                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                        )
-
-                        try {
-                            // Gold standard: setAlarmClock guarantees alarm firing and status bar icon
-                            val clockInfo = AlarmManager.AlarmClockInfo(triggerAtMillis, showPendingIntent)
-                            alarmManager.setAlarmClock(clockInfo, pendingIntent)
-                            result.success(true)
-                        } catch (e: Exception) {
-                            // Fallback to setExactAndAllowWhileIdle
-                            try {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                                    alarmManager.setExactAndAllowWhileIdle(
-                                        AlarmManager.RTC_WAKEUP,
-                                        triggerAtMillis,
-                                        pendingIntent
-                                    )
-                                } else {
-                                    alarmManager.setExact(
-                                        AlarmManager.RTC_WAKEUP,
-                                        triggerAtMillis,
-                                        pendingIntent
-                                    )
-                                }
-                                result.success(true)
-                            } catch (fallbackEx: Exception) {
-                                result.error("ALARM_ERROR", fallbackEx.message, null)
-                            }
-                        }
+                        result.success(success)
                     }
 
                     "cancelAlarm" -> {
                         val id = call.argument<Int>("id") ?: 0
-                        val intent = Intent(this@MainActivity, AlarmBroadcastReceiver::class.java).apply {
-                            action = "FACEUP_ALARM_TRIGGER"
-                        }
-                        val pendingIntent = PendingIntent.getBroadcast(
-                            this@MainActivity,
-                            id,
-                            intent,
-                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                        )
-                        alarmManager.cancel(pendingIntent)
+                        AlarmScheduler.cancel(this@MainActivity, id)
                         result.success(true)
                     }
 

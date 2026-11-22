@@ -174,6 +174,31 @@ class AlarmForegroundService : Service() {
 
     private fun startRingtone(ringtoneUriString: String) {
         try {
+            // Anti-Dismissal Audio Strategy: Ensure alarm volume is high and audible
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            val maxVol = audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_ALARM)
+            val currentVol = audioManager.getStreamVolume(android.media.AudioManager.STREAM_ALARM)
+            if (currentVol < (maxVol * 0.7).toInt()) {
+                audioManager.setStreamVolume(
+                    android.media.AudioManager.STREAM_ALARM,
+                    (maxVol * 0.85).toInt(),
+                    0
+                )
+            }
+
+            // Audio Focus request
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val focusRequest = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    .build()
+                audioManager.requestAudioFocus(focusRequest)
+            }
+
             val uri: Uri = if (ringtoneUriString.isNotEmpty()) {
                 Uri.parse(ringtoneUriString)
             } else {

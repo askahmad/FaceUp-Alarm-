@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.faceup.face_up_alarm"
-    compileSdk = 36
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
